@@ -2,15 +2,22 @@ import streamlit as st
 from PIL import Image
 from google import genai
 import json
+import io
 
-# Initialize Gemini Client (replace with your actual API key)
-API_KEY = "YOUR_GEMINI_API_KEY"
-client = genai.Client(api_key=API_KEY)
+st.set_page_config(page_title="AI Calorie Counter", layout="centered")
+
+# Retrieve API key securely from Streamlit Secrets or Environment
+api_key = st.secrets.get("GEMINI_API_KEY", None)
+
+if not api_key:
+    st.error("API Key missing! Please set GEMINI_API_KEY in Streamlit Advanced Settings -> Secrets.")
+    st.stop()
+
+client = genai.Client(api_key=api_key)
 
 st.title("AI Calorie Counter")
 st.write("Snap or upload a meal photo to calculate calories automatically.")
 
-# Image Input: Camera or File Upload
 source = st.radio("Choose input source:", ["Camera", "File Upload"])
 
 image_file = None
@@ -21,7 +28,12 @@ else:
 
 if image_file:
     img = Image.open(image_file)
-    st.image(img, caption="Target Meal", use_container_width=True)
+    
+    # Resize high-resolution HD images to prevent memory crash / timeout
+    max_size = (1024, 1024)
+    img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+    st.image(img, caption="Target Meal (Optimized)", use_container_width=True)
 
     if st.button("Analyze Calories"):
         with st.spinner("AI is inspecting your plate..."):
@@ -38,17 +50,14 @@ if image_file:
             """
 
             try:
-                # Send image and prompt directly to Gemini 2.0 Flash
                 response = client.models.generate_content(
                     model='gemini-2.0-flash',
                     contents=[img, prompt]
                 )
                 
-                # Parse JSON output
                 clean_json = response.text.replace("```json", "").replace("```", "").strip()
                 data = json.loads(clean_json)
 
-                # Display Results
                 st.success(f"Total Estimated Calories: {data['totalCalories']} kcal")
                 
                 col1, col2, col3 = st.columns(3)
